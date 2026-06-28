@@ -1,0 +1,5 @@
+{
+  "prediction": "spam",
+  "confidence": 1.0,
+  "analysis_stage": "low_cost"
+}

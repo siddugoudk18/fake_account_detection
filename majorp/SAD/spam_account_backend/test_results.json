@@ -1,0 +1,26 @@
+[
+  [
+    "SPAM",
+    {
+      "prediction": "spam",
+      "confidence": 1.0,
+      "analysis_stage": "low_cost"
+    }
+  ],
+  [
+    "LEGIT",
+    {
+      "prediction": "legitimate",
+      "confidence": 1.0,
+      "analysis_stage": "low_cost"
+    }
+  ],
+  [
+    "AMBIG",
+    {
+      "prediction": "legitimate",
+      "confidence": 1.0,
+      "analysis_stage": "low_cost"
+    }
+  ]
+]

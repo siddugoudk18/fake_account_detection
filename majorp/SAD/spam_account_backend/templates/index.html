@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CADENCE-Spam | Spam Account Detector</title>
+  <meta name="description" content="Confidence-Adaptive and Cost-Aware Spam Account Detection in Online Social Networks using AI two-stage ML pipeline." />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --surface2: #1a2233;
+      --border: rgba(255,255,255,0.07);
+      --accent: #6366f1;
+      --accent2: #8b5cf6;
+      --spam-red: #ef4444;
+      --legit-green: #22c55e;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --radius: 16px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background Blobs ── */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 { width: 500px; height: 500px; background: var(--accent); top: -150px; left: -150px; }
+    .blob-2 { width: 400px; height: 400px; background: var(--accent2); bottom: -100px; right: -100px; }
+    .blob-3 { width: 300px; height: 300px; background: #ec4899; top: 40%; left: 60%; }
+
+    /* ── Nav ── */
+    nav {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.25rem 2.5rem;
+      background: rgba(17,24,39,0.7);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 0.75rem; text-decoration: none;
+    }
+    .nav-logo-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.25rem;
+    }
+    .nav-logo-text { font-size: 1.2rem; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+    .nav-logo-text span { color: var(--accent); }
+    .nav-badge {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; padding: 0.3rem 0.9rem; border-radius: 50px;
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px;
+    }
+    {% if not models_ready %}
+    .model-warning {
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.4);
+      color: #fca5a5;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      text-align: center;
+      margin: 1rem 2.5rem 0;
+      display: flex; align-items: center; gap: 0.5rem; justify-content: center;
+    }
+    {% endif %}
+
+    /* ── Hero ── */
+    .hero {
+      position: relative; z-index: 5;
+      text-align: center;
+      padding: 4rem 2rem 2rem;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+      color: #a5b4fc; padding: 0.4rem 1rem; border-radius: 50px;
+      font-size: 0.8rem; font-weight: 600; margin-bottom: 1.5rem;
+      animation: fadeInDown 0.6s ease;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 900; line-height: 1.15; letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #fff 0%, #a5b4fc 60%, #8b5cf6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: fadeInDown 0.7s ease 0.1s both;
+    }
+    .hero p {
+      color: var(--muted); font-size: 1.1rem; max-width: 600px; margin: 1rem auto 0;
+      animation: fadeInDown 0.7s ease 0.2s both;
+    }
+
+    /* ── Main Layout ── */
+    .main-wrap {
+      position: relative; z-index: 5;
+      max-width: 1100px; margin: 2rem auto;
+      padding: 0 1.5rem;
+      display: grid; grid-template-columns: 1.2fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 768px) {
+      .main-wrap { grid-template-columns: 1fr; }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      animation: fadeIn 0.6s ease;
+    }
+    .card-title {
+      font-size: 1rem; font-weight: 700; color: var(--text);
+      margin-bottom: 1.25rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .card-title span { font-size: 1.1rem; }
+
+    /* ── Section Labels ── */
+    .section-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--accent);
+      margin: 1.25rem 0 0.75rem; padding: 0 0 0.4rem;
+      border-bottom: 1px solid rgba(99,102,241,0.2);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    /* ── Form Fields ── */
+    .field { margin-bottom: 1rem; }
+    .field label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.8rem; font-weight: 600; color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .field label .hint { font-weight: 400; font-size: 0.72rem; color: #64748b; }
+
+    .field input[type="range"] {
+      width: 100%; accent-color: var(--accent);
+      height: 4px; cursor: pointer;
+    }
+    .field .range-row {
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+    .field .range-val {
+      min-width: 52px; text-align: right;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.3rem 0.5rem;
+      font-size: 0.85rem; font-weight: 600; color: var(--text);
+    }
+    .field input[type="number"] {
+      width: 100%;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0.65rem 0.9rem;
+      color: var(--text); font-size: 0.9rem; font-family: 'Inter', sans-serif;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .field input[type="number"]:focus { border-color: var(--accent); }
+
+    /* ── Submit Button ── */
+    #analyzeBtn {
+      width: 100%; margin-top: 1.5rem;
+      padding: 0.9rem; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; font-size: 1rem; font-weight: 700;
+      cursor: pointer; letter-spacing: 0.3px;
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    #analyzeBtn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(99,102,241,0.4); }
+    #analyzeBtn:active { transform: translateY(0); }
+    #analyzeBtn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    /* ── Result Panel ── */
+    .result-panel {
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+
+    /* ── Result Box ── */
+    .result-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem 1.5rem;
+      text-align: center;
+      min-height: 180px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0.75rem;
+      transition: all 0.4s ease;
+    }
+    .result-box.spam {
+      border-color: rgba(239,68,68,0.5);
+      background: rgba(239,68,68,0.06);
+      box-shadow: 0 0 40px rgba(239,68,68,0.1);
+    }
+    .result-box.legit {
+      border-color: rgba(34,197,94,0.5);
+      background: rgba(34,197,94,0.06);
+      box-shadow: 0 0 40px rgba(34,197,94,0.1);
+    }
+    .result-icon { font-size: 3rem; animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    .result-label {
+      font-size: 1.8rem; font-weight: 900; letter-spacing: -1px;
+    }
+    .result-label.spam { color: var(--spam-red); }
+    .result-label.legit { color: var(--legit-green); }
+    .result-conf {
+      font-size: 0.9rem; color: var(--muted); font-weight: 500;
+    }
+    .result-conf strong { color: var(--text); }
+    .result-placeholder { color: #475569; font-size: 0.9rem; }
+
+    /* ── Stage Badge ── */
+    .stage-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.85rem; border-radius: 50px;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.3px;
+      background: rgba(99,102,241,0.15); color: #a5b4fc;
+      border: 1px solid rgba(99,102,241,0.3);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Confidence Bar ── */
+    .conf-section { width: 100%; }
+    .conf-row { display: flex; justify-content: space-between; margin-bottom: 0.3rem; font-size: 0.8rem; }
+    .conf-row .label { color: var(--muted); font-weight: 600; }
+    .conf-row .value { color: var(--text); font-weight: 700; }
+    .conf-bar-bg {
+      height: 8px; background: rgba(255,255,255,0.06);
+      border-radius: 50px; overflow: hidden; margin-bottom: 0.75rem;
+    }
+    .conf-bar-fill {
+      height: 100%; border-radius: 50px;
+      transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .conf-bar-fill.spam { background: linear-gradient(90deg, #ef4444, #f97316); }
+    .conf-bar-fill.legit { background: linear-gradient(90deg, #22c55e, #10b981); }
+
+    /* ── Stats Grid ── */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .stat-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0.9rem 1rem;
+    }
+    .stat-label { font-size: 0.7rem; color: var(--muted); font-weight: 600; margin-bottom: 0.25rem; }
+    .stat-value { font-size: 1.1rem; font-weight: 800; color: var(--text); }
+
+    /* ── Pipeline Info ── */
+    .pipeline-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
+    }
+    .pipeline-card h3 { font-size: 0.85rem; font-weight: 700; margin-bottom: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .pipeline-step {
+      display: flex; align-items: flex-start; gap: 1rem;
+      position: relative; padding-bottom: 1rem;
+    }
+    .pipeline-step:not(:last-child)::after {
+      content: ''; position: absolute; left: 18px; top: 38px;
+      width: 2px; height: calc(100% - 10px);
+      background: var(--border);
+    }
+    .pipeline-dot {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+    .pipeline-content { flex: 1; }
+    .pipeline-title { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+    .pipeline-desc { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; line-height: 1.4; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 2rem; right: 2rem; z-index: 9999;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0.85rem 1.25rem;
+      font-size: 0.85rem; color: var(--text);
+      display: flex; align-items: center; gap: 0.5rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      transform: translateY(80px); opacity: 0;
+      transition: all 0.3s ease; pointer-events: none;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeInDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes popIn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Preset Buttons ── */
+    .presets { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .preset-btn {
+      padding: 0.35rem 0.85rem; border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--muted);
+      font-size: 0.75rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .preset-btn.spam-preset:hover { border-color: var(--spam-red); color: var(--spam-red); }
+    .preset-btn.legit-preset:hover { border-color: var(--legit-green); color: var(--legit-green); }
+  </style>
+</head>
+<body>
+  <!-- Background blobs -->
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+
+  <!-- Navbar -->
+  <nav>
+    <a class="nav-logo" href="/">
+      <div class="nav-logo-icon">🛡️</div>
+      <span class="nav-logo-text"><span>CADENCE</span>-Spam</span>
+    </a>
+    <span class="nav-badge">AI-Powered v1.0</span>
+  </nav>
+
+  {% if not models_ready %}
+  <div class="model-warning">
+    ⚠️ Models could not be loaded. Ensure <code>stage1_model.pkl</code> and <code>stage2_model.pkl</code> exist in the project directory.
+  </div>
+  {% endif %}
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">
+      <span>🔬</span> Two-Stage Confidence-Adaptive ML Pipeline
+    </div>
+    <h1>Spam Account Detection<br/>Powered by AI</h1>
+    <p>Enter social network account features below and let CADENCE-Spam's two-stage Random Forest pipeline determine if the account is spam or legitimate.</p>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-wrap">
+
+    <!-- Left: Input Form -->
+    <div class="card">
+      <div class="card-title"><span>📋</span> Account Features</div>
+
+      <!-- Quick Presets -->
+      <div class="presets">
+        <button class="preset-btn" onclick="fillRandom()">🎲 Random</button>
+        <button class="preset-btn spam-preset" onclick="fillSpam()">🚫 Spam Example</button>
+        <button class="preset-btn legit-preset" onclick="fillLegit()">✅ Legit Example</button>
+      </div>
+
+      <form id="predForm">
+
+        <!-- Stage 1: Low-Cost Features -->
+        <div class="section-label"><span>⚡</span> Stage 1 — Low-Cost Features</div>
+
+        <div class="field">
+          <label>Account Age (days) <span class="hint">Days since account was created</span></label>
+          <div class="range-row">
+            <input type="range" id="account_age" name="account_age" min="1" max="3650" value="180" oninput="updateVal('account_age', this.value)">
+            <span class="range-val" id="account_age_val">180</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Profile Completeness <span class="hint">0 = empty, 1 = fully filled</span></label>
+          <div class="range-row">
+            <input type="range" id="profile_completeness" name="profile_completeness" min="0" max="1" step="0.01" value="0.75" oninput="updateVal('profile_completeness', parseFloat(this.value).toFixed(2))">
+            <span class="range-val" id="profile_completeness_val">0.75</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Posting Frequency (posts/day) <span class="hint">Average posts per day</span></label>
+          <div class="range-row">
+            <input type="range" id="posting_frequency" name="posting_frequency" min="0" max="100" step="0.5" value="5" oninput="updateVal('posting_frequency', parseFloat(this.value).toFixed(1))">
+            <span class="range-val" id="posting_frequency_val">5.0</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Message Similarity <span class="hint">0 = unique, 1 = identical messages</span></label>
+          <div class="range-row">
+            <input type="range" id="message_similarity" name="message_similarity" min="0" max="1" step="0.01" value="0.2" oninput="updateVal('message_similarity', parseFloat(this.value).toFixed(2))">
+            <span class="range-val" id="message_similarity_val">0.20</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Hashtag Usage (per post) <span class="hint">Avg hashtags used per post</span></label>
+          <div class="range-row">
+            <input type="range" id="hashtag_usage" name="hashtag_usage" min="0" max="20" step="0.1" value="2" oninput="updateVal('hashtag_usage', parseFloat(this.value).toFixed(1))">
+            <span class="range-val" id="hashtag_usage_val">2.0</span>
+          </div>
+        </div>
+
+        <!-- Stage 2: High-Cost Features -->
+        <div class="section-label"><span>🔬</span> Stage 2 — High-Cost Features</div>
+
+        <div class="field">
+          <label>Malicious URL Count <span class="hint">Suspicious URLs in recent posts</span></label>
+          <div class="range-row">
+            <input type="range" id="malicious_url_count" name="malicious_url_count" min="0" max="50" step="1" value="1" oninput="updateVal('malicious_url_count', this.value)">
+            <span class="range-val" id="malicious_url_count_val">1</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Follower/Following Ratio <span class="hint">Followers ÷ Following</span></label>
+          <div class="range-row">
+            <input type="range" id="follower_following_ratio" name="follower_following_ratio" min="0" max="10" step="0.05" value="1.5" oninput="updateVal('follower_following_ratio', parseFloat(this.value).toFixed(2))">
+            <span class="range-val" id="follower_following_ratio_val">1.50</span>
+          </div>
+        </div>
+
+        <button type="submit" id="analyzeBtn" {% if not models_ready %}disabled title="Models not loaded"{% endif %}>
+          <span id="btnText">🔍 Analyze Account</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Right: Results + Info -->
+    <div class="result-panel">
+
+      <!-- Result Box -->
+      <div class="card" style="padding:1.5rem;">
+        <div class="card-title"><span>🎯</span> Detection Result</div>
+        <div id="resultBox" class="result-box">
+          <div class="result-placeholder">Enter account features and click<br/><strong>Analyze Account</strong> to see results</div>
+        </div>
+      </div>
+
+      <!-- Confidence Bars -->
+      <div class="card" id="confCard" style="display:none; padding:1.5rem;">
+        <div class="card-title"><span>📊</span> Confidence Analysis</div>
+        <div id="confContent"></div>
+      </div>
+
+      <!-- Pipeline Info -->
+      <div class="pipeline-card">
+        <h3>How it works</h3>
+        <div class="pipeline-step">
+          <div class="pipeline-dot">1</div>
+          <div class="pipeline-content">
+            <div class="pipeline-title">Stage 1 — Low-Cost Analysis</div>
+            <div class="pipeline-desc">Uses 5 basic features (age, completeness, frequency, similarity, hashtags). If confidence ≥ 80%, returns result immediately.</div>
+          </div>
+        </div>
+        <div class="pipeline-step">
+          <div class="pipeline-dot">⚖</div>
+          <div class="pipeline-content">
+            <div class="pipeline-title">Adaptive Decision Gate</div>
+            <div class="pipeline-desc">Confidence threshold: <strong style="color:#a5b4fc">0.80</strong>. Low confidence → escalates to Stage 2 for deeper analysis.</div>
+          </div>
+        </div>
+        <div class="pipeline-step" style="padding-bottom:0;">
+          <div class="pipeline-dot">2</div>
+          <div class="pipeline-content">
+            <div class="pipeline-title">Stage 2 — Full Analysis</div>
+            <div class="pipeline-desc">Uses all 7 features including malicious URLs and follower ratio. Provides the final, most accurate classification.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ── Range value display ──
+    function updateVal(id, val) {
+      document.getElementById(id + '_val').textContent = val;
+    }
+
+    // ── Preset fillers ──
+    function setValues(vals) {
+      Object.entries(vals).forEach(([k, v]) => {
+        const el = document.getElementById(k);
+        if (el) {
+          el.value = v;
+          const precision = el.step && el.step.includes('.') ? el.step.split('.')[1].length : 0;
+          const display = precision > 0 ? parseFloat(v).toFixed(precision) : v;
+          updateVal(k, display);
+        }
+      });
+    }
+
+    function fillSpam() {
+      setValues({
+        account_age: 15,
+        profile_completeness: 0.10,
+        posting_frequency: 80,
+        message_similarity: 0.95,
+        hashtag_usage: 13,
+        malicious_url_count: 35,
+        follower_following_ratio: 0.05,
+      });
+      showToast('🚫 Spam example loaded!', false);
+    }
+
+    function fillLegit() {
+      setValues({
+        account_age: 900,
+        profile_completeness: 0.90,
+        posting_frequency: 3.5,
+        message_similarity: 0.15,
+        hashtag_usage: 1.5,
+        malicious_url_count: 0,
+        follower_following_ratio: 2.5,
+      });
+      showToast('✅ Legitimate example loaded!', false);
+    }
+
+    function fillRandom() {
+      setValues({
+        account_age: Math.floor(Math.random() * 1800 + 10),
+        profile_completeness: (Math.random()).toFixed(2),
+        posting_frequency: (Math.random() * 80).toFixed(1),
+        message_similarity: (Math.random()).toFixed(2),
+        hashtag_usage: (Math.random() * 15).toFixed(1),
+        malicious_url_count: Math.floor(Math.random() * 40),
+        follower_following_ratio: (Math.random() * 5).toFixed(2),
+      });
+      showToast('🎲 Random values filled!', false);
+    }
+
+    // ── Toast ──
+    function showToast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => { t.className = 'toast'; }, 3000);
+    }
+
+    // ── Form Submit ──
+    document.getElementById('predForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const btn = document.getElementById('analyzeBtn');
+      const btnText = document.getElementById('btnText');
+      btn.disabled = true;
+      btnText.innerHTML = '<div class="spinner"></div> Analyzing...';
+
+      const formData = new FormData(e.target);
+      const data = {};
+      formData.forEach((v, k) => data[k] = v);
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const result = await res.json();
+
+        if (result.error) {
+          showToast('❌ ' + result.error, true);
+          document.getElementById('resultBox').className = 'result-box';
+          document.getElementById('resultBox').innerHTML = `<div class="result-placeholder" style="color:#f87171">${result.error}</div>`;
+        } else {
+          renderResult(result);
+        }
+      } catch (err) {
+        showToast('❌ Network error. Is the server running?', true);
+      } finally {
+        btn.disabled = false;
+        btnText.innerHTML = '🔍 Analyze Account';
+      }
+    });
+
+    function renderResult(r) {
+      const isSpam = r.prediction === 'spam';
+      const box = document.getElementById('resultBox');
+      box.className = 'result-box ' + (isSpam ? 'spam' : 'legit');
+      box.innerHTML = `
+        <div class="result-icon">${isSpam ? '🚫' : '✅'}</div>
+        <div class="result-label ${isSpam ? 'spam' : 'legit'}">${isSpam ? 'SPAM' : 'LEGITIMATE'}</div>
+        <div class="result-conf">Confidence: <strong>${r.confidence}%</strong></div>
+        <div class="stage-badge">${r.stage_icon} ${r.analysis_stage}</div>
+      `;
+
+      // Confidence bars
+      const confCard = document.getElementById('confCard');
+      confCard.style.display = 'block';
+      const cls = isSpam ? 'spam' : 'legit';
+
+      let html = `
+        <div class="conf-row">
+          <span class="label">⚡ Stage 1 Confidence</span>
+          <span class="value">${r.stage1_conf}%</span>
+        </div>
+        <div class="conf-bar-bg"><div class="conf-bar-fill ${cls}" style="width:${r.stage1_conf}%"></div></div>
+      `;
+
+      if (r.stage2_conf !== null) {
+        html += `
+          <div class="conf-row">
+            <span class="label">🔬 Stage 2 Confidence</span>
+            <span class="value">${r.stage2_conf}%</span>
+          </div>
+          <div class="conf-bar-bg"><div class="conf-bar-fill ${cls}" style="width:${r.stage2_conf}%"></div></div>
+        `;
+      } else {
+        html += `<div style="font-size:0.78rem; color:#64748b; margin-top:0.25rem;">⚡ Stage 1 was confident enough — Stage 2 was skipped!</div>`;
+      }
+
+      document.getElementById('confContent').innerHTML = html;
+      showToast(isSpam ? '🚫 Spam account detected!' : '✅ Account appears legitimate!', false);
+    }
+  </script>
+</body>
+</html>
